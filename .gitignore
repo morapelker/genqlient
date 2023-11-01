@@ -1,6 +1,7 @@
 generate/testdata/tmp
 internal/lint/golangci-lint
 
+hashexample
 ## Go standard gitignore
 # Binaries for programs and plugins
 *.exe

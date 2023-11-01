@@ -3,6 +3,8 @@ package graphql
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -116,7 +118,22 @@ type Request struct {
 	// The GraphQL operation name. The server typically doesn't
 	// require this unless there are multiple queries in the
 	// document, but genqlient sets it unconditionally anyway.
-	OpName string `json:"operationName"`
+	OpName     string                  `json:"operationName"`
+	Extensions HashedRequestExtensions `json:"extensions"`
+}
+
+type HashedRequestExtensions struct {
+	PersistedQuery HashedRequestPersistedQuery `json:"persistedQuery"`
+}
+
+type HashedRequestPersistedQuery struct {
+	Version    int    `json:"version"`
+	Sha256Hash string `json:"sha256Hash"`
+}
+
+type HashedRequest struct {
+	Extensions HashedRequestExtensions `json:"extensions"`
+	Variables  interface{}             `json:"variables,omitempty"`
 }
 
 // Response that contains data returned by the GraphQL API.
@@ -134,9 +151,51 @@ type Response struct {
 	Errors     gqlerror.List          `json:"errors,omitempty"`
 }
 
+func (c *client) makeHashedRequest(ctx context.Context, req *Request, resp *Response) error {
+	httpReq, err := c.createHashedPostRequest(req)
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	if ctx != nil {
+		httpReq = httpReq.WithContext(ctx)
+	}
+
+	httpResp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK {
+		var respBody []byte
+		respBody, err = io.ReadAll(httpResp.Body)
+		if err != nil {
+			respBody = []byte(fmt.Sprintf("<unreadable: %v>", err))
+		}
+		return fmt.Errorf("returned error %v: %s", httpResp.Status, respBody)
+	}
+
+	err = json.NewDecoder(httpResp.Body).Decode(resp)
+	if err != nil {
+		return err
+	}
+	if len(resp.Errors) > 0 {
+		return resp.Errors
+	}
+	return nil
+}
+
 func (c *client) MakeRequest(ctx context.Context, req *Request, resp *Response) error {
+	err := c.makeHashedRequest(ctx, req, resp)
+	if err == nil {
+		return nil
+	}
+	if !strings.Contains(err.Error(), "PersistedQueryNotFound") {
+		return err
+	}
 	var httpReq *http.Request
-	var err error
 	if c.method == http.MethodGet {
 		httpReq, err = c.createGetRequest(req)
 	} else {
@@ -177,7 +236,37 @@ func (c *client) MakeRequest(ctx context.Context, req *Request, resp *Response) 
 	return nil
 }
 
+func (c *client) createHashedPostRequest(req *Request) (*http.Request, error) {
+	sha256Hash := sha256.Sum256([]byte(req.Query))
+	hexed := hex.EncodeToString(sha256Hash[:])
+	hashedExtensions := HashedRequestExtensions{
+		PersistedQuery: HashedRequestPersistedQuery{
+			Version:    1,
+			Sha256Hash: hexed,
+		},
+	}
+	hashedReq := HashedRequest{
+		Extensions: hashedExtensions,
+		Variables:  req.Variables,
+	}
+	req.Extensions = hashedExtensions
+	body, err := json.Marshal(hashedReq)
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq, err := http.NewRequest(
+		c.method,
+		c.endpoint,
+		bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	return httpReq, nil
+}
+
 func (c *client) createPostRequest(req *Request) (*http.Request, error) {
+
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
