@@ -180,12 +180,14 @@ func (c *client) makeHashedRequest(ctx context.Context, req *Request, resp *Resp
 	}
 
 	err = json.NewDecoder(httpResp.Body).Decode(resp)
+
 	if err != nil {
 		return err
 	}
+
 	if len(resp.Errors) > 0 {
 		for _, e := range resp.Errors {
-			if e.Error() == "PersistedQueryNotFound" {
+			if e.Error() == "input: PersistedQueryNotFound" {
 				return persistedQueryNotFound
 			}
 		}
@@ -202,6 +204,7 @@ func (c *client) MakeRequest(ctx context.Context, req *Request, resp *Response) 
 	if !errors.Is(err, persistedQueryNotFound) {
 		return err
 	}
+	resp.Errors = nil
 	var httpReq *http.Request
 	if c.method == http.MethodGet {
 		httpReq, err = c.createGetRequest(req)
