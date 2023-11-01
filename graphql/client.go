@@ -151,6 +151,8 @@ type Response struct {
 	Errors     gqlerror.List          `json:"errors,omitempty"`
 }
 
+var persistedQueryNotFound = errors.New("PersistedQueryNotFound")
+
 func (c *client) makeHashedRequest(ctx context.Context, req *Request, resp *Response) error {
 	httpReq, err := c.createHashedPostRequest(req)
 	if err != nil {
@@ -182,6 +184,11 @@ func (c *client) makeHashedRequest(ctx context.Context, req *Request, resp *Resp
 		return err
 	}
 	if len(resp.Errors) > 0 {
+		for _, e := range resp.Errors {
+			if e.Error() == "PersistedQueryNotFound" {
+				return persistedQueryNotFound
+			}
+		}
 		return resp.Errors
 	}
 	return nil
@@ -192,7 +199,7 @@ func (c *client) MakeRequest(ctx context.Context, req *Request, resp *Response) 
 	if err == nil {
 		return nil
 	}
-	if !strings.Contains(err.Error(), "PersistedQueryNotFound") {
+	if !errors.Is(err, persistedQueryNotFound) {
 		return err
 	}
 	var httpReq *http.Request
