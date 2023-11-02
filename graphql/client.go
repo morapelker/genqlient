@@ -40,6 +40,12 @@ type Client interface {
 		req *Request,
 		resp *Response,
 	) error
+
+	MakeHashedRequest(
+		ctx context.Context,
+		req *Request,
+		resp *Response,
+	) error
 }
 
 type client struct {
@@ -151,9 +157,9 @@ type Response struct {
 	Errors     gqlerror.List          `json:"errors,omitempty"`
 }
 
-var persistedQueryNotFound = errors.New("PersistedQueryNotFound")
+var PersistedQueryNotFound = errors.New("PersistedQueryNotFound")
 
-func (c *client) makeHashedRequest(ctx context.Context, req *Request, resp *Response) error {
+func (c *client) MakeHashedRequest(ctx context.Context, req *Request, resp *Response) error {
 	httpReq, err := c.createHashedPostRequest(req)
 	if err != nil {
 		return err
@@ -188,7 +194,7 @@ func (c *client) makeHashedRequest(ctx context.Context, req *Request, resp *Resp
 	if len(resp.Errors) > 0 {
 		for _, e := range resp.Errors {
 			if e.Error() == "input: PersistedQueryNotFound" {
-				return persistedQueryNotFound
+				return PersistedQueryNotFound
 			}
 		}
 		return resp.Errors
@@ -197,15 +203,8 @@ func (c *client) makeHashedRequest(ctx context.Context, req *Request, resp *Resp
 }
 
 func (c *client) MakeRequest(ctx context.Context, req *Request, resp *Response) error {
-	err := c.makeHashedRequest(ctx, req, resp)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, persistedQueryNotFound) {
-		return err
-	}
-	resp.Errors = nil
 	var httpReq *http.Request
+	var err error
 	if c.method == http.MethodGet {
 		httpReq, err = c.createGetRequest(req)
 	} else {

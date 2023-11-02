@@ -37,13 +37,21 @@ func {{.Name}}(
     }
     {{end}}
     var data_ {{.ResponseName}}
-    resp_ := &graphql.Response{Data: &data_}
+    resp_ := graphql.Response{Data: &data_}
 
-    err_ = client_.MakeRequest(
-        {{if ne .Config.ContextType "-"}}ctx_{{else}}nil{{end}},
-        req_,
-        resp_,
-    )
-	
+  	err_ = client_.MakeHashedRequest(
+  		ctx_,
+  		req_,
+  		&resp_,
+  	)
+  	if errors.Is(err_, graphql.PersistedQueryNotFound) {
+  		resp_ = graphql.Response{Data: &data_}
+  	    err_ = client_.MakeRequest(
+            {{if ne .Config.ContextType "-"}}ctx_{{else}}nil{{end}},
+            req_,
+            &resp_,
+        )
+  	}
+
     return &data_, {{if .Config.Extensions -}}resp_.Extensions,{{end -}} err_
 }

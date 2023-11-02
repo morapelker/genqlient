@@ -12,8 +12,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/Khan/genqlient/graphql"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/Khan/genqlient/graphql"
 )
 
 // lastResponseTransport is an HTTP transport that keeps track of the last response
@@ -89,7 +90,9 @@ func (c *roundtripClient) roundtripResponse(resp interface{}) {
 
 	assert.Equal(c.t, string(body), string(bodyAgain))
 }
-
+func (c *roundtripClient) MakeHashedRequest(ctx context.Context, req *graphql.Request, resp *graphql.Response) error {
+	return c.MakeRequest(ctx, req, resp)
+}
 func (c *roundtripClient) MakeRequest(ctx context.Context, req *graphql.Request, resp *graphql.Response) error {
 	// TODO(benkraft): Also check the variables round-trip.  This is a bit less
 	// important since most of the code is the same (and input types are
