@@ -129,7 +129,7 @@ type Request struct {
 }
 
 type HashedRequestExtensions struct {
-	PersistedQuery HashedRequestPersistedQuery `json:"persistedQuery"`
+	PersistedQuery *HashedRequestPersistedQuery `json:"persistedQuery,omitempty"`
 }
 
 type HashedRequestPersistedQuery struct {
@@ -249,7 +249,7 @@ func (c *client) createHashedPostRequest(req *Request) (*http.Request, error) {
 	sha256Hash := sha256.Sum256([]byte(req.Query))
 	hexed := hex.EncodeToString(sha256Hash[:])
 	hashedExtensions := HashedRequestExtensions{
-		PersistedQuery: HashedRequestPersistedQuery{
+		PersistedQuery: &HashedRequestPersistedQuery{
 			Version:    1,
 			Sha256Hash: hexed,
 		},
